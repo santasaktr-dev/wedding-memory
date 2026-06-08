@@ -1,0 +1,10 @@
+.next
+.next.nosync
+node_modules
+.env.local
+.vercel
+dist
+out
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
