@@ -58,7 +58,7 @@ Guests can scan a QR code at the wedding venue or click from LINE Official Accou
 
 ### Venue
 
-- Pearl Wedding Avenue
+- Pearl Wedding Venue
 
 ### Theme
 
@@ -240,7 +240,7 @@ Wedding info:
 ```text
 Smart & Jajah
 Sunday, 1 November 2026
-Pearl Wedding Avenue
+Pearl Wedding Venue
 ```
 
 Primary CTA buttons:
@@ -871,7 +871,7 @@ Suggested reusable components:
 |              View Memory Wall                   |
 |                                                 |
 |        Sunday, 1 November 2026                  |
-|        Pearl Wedding Avenue                     |
+|        Pearl Wedding Venue                     |
 |                                                 |
  -------------------------------------------------
 ```
@@ -1154,7 +1154,7 @@ Thank you for being part of our celebration.
 Leave us a wish, share a memory, or upload a beautiful moment from the day.
 
 Sunday, 1 November 2026
-Pearl Wedding Avenue
+Pearl Wedding Venue
 
 [Write a Wish]
 [Upload a Moment]

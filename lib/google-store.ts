@@ -13,6 +13,7 @@ type GoogleAction =
   | "adminList"
   | "getPhotoBytes"
   | "moderate"
+  | "pinSubmission"
   | "likeSubmission";
 
 async function callGoogleStore<T>(
@@ -49,6 +50,7 @@ export async function createWish(payload: {
   table_number: string | null;
   message_type: string;
   message: string;
+  status: SubmissionStatus;
 }) {
   return callGoogleStore<{ ok: boolean; id?: string }>("createWish", payload);
 }
@@ -61,6 +63,7 @@ export async function createPhoto(payload: {
   file_name: string;
   file_type: string;
   file_base64: string;
+  status: SubmissionStatus;
 }) {
   return callGoogleStore<{ ok: boolean; id?: string; image_url?: string }>("createPhoto", payload);
 }
@@ -133,6 +136,14 @@ export async function moderateSubmission(payload: {
   status: SubmissionStatus;
 }) {
   return callGoogleStore<{ ok: boolean }>("moderate", payload);
+}
+
+export async function pinSubmission(payload: {
+  content_type: "wish" | "photo";
+  id: string;
+  is_pinned: boolean;
+}) {
+  return callGoogleStore<{ ok: boolean }>("pinSubmission", payload);
 }
 
 export async function likeSubmission(payload: {

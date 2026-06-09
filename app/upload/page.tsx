@@ -1,13 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Upload, CheckCircle2, Loader2, XCircle } from "lucide-react";
-import { Button, Field, PageShell, inputClass } from "@/components/ui";
+import { Button, ButtonLink, Field, PageShell, inputClass } from "@/components/ui";
+import { useLanguage } from "@/components/language-provider";
+import { getWeddingClientId } from "@/lib/client-id";
 import { photoCategories, type PhotoMoment, type PhotoCategory } from "@/lib/types";
 
-const maxImageSide = 1200;
-const compressionQuality = 0.75;
+const maxImageSide = 1400;
+const maxUploadBytes = 5 * 1024 * 1024;
+const compressionQuality = 0.68;
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function rememberPhoto(photo: PhotoMoment) {
   if (!photo.image_url) return;
@@ -41,7 +47,7 @@ function loadImage(file: File) {
 }
 
 async function optimizeImage(file: File) {
-  if (file.size <= 1.4 * 1024 * 1024) {
+  if (file.size <= 700 * 1024) {
     return file;
   }
 
@@ -55,7 +61,12 @@ async function optimizeImage(file: File) {
   canvas.height = height;
 
   const context = canvas.getContext("2d");
-  if (!context) return file;
+  if (!context) {
+    if (image.src.startsWith("blob:")) {
+      URL.revokeObjectURL(image.src);
+    }
+    return file;
+  }
 
   context.drawImage(image, 0, 0, width, height);
 
@@ -77,7 +88,7 @@ async function optimizeImage(file: File) {
 }
 
 export default function UploadPage() {
-  const router = useRouter();
+  const { t, tPhotoCategory } = useLanguage();
   const [status, setStatus] = useState<"idle" | "optimizing" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [consent, setConsent] = useState(false);
@@ -93,14 +104,41 @@ export default function UploadPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  function resetUploadForm() {
+    setSelectedFile(null);
+    setPreviewUrl((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return null;
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setGuestName("");
+    setTableNumber("");
+    setCaption("");
+    setSelectedCategory("Couple Moment");
+    setConsent(false);
+    setStatus("idle");
+    setErrorMessage("");
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
       const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
+      setPreviewUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return url;
+      });
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -110,7 +148,7 @@ export default function UploadPage() {
 
     if (!guestName || !selectedFile || !consent) {
       setStatus("error");
-      setErrorMessage("Please fill out all required fields correctly.");
+      setErrorMessage(t("upload.validationError"));
       return;
     }
 
@@ -125,50 +163,40 @@ export default function UploadPage() {
     formData.append("category", selectedCategory);
     formData.append("photo", selectedFile);
 
-    // Generate local preview URL immediately for optimistic rendering in gallery
-    const localPreviewUrl = previewUrl || URL.createObjectURL(selectedFile);
-    const optimisticPhoto: PhotoMoment = {
-      id: `optimistic-${crypto.randomUUID()}`,
-      guest_name: guestName,
-      table_number: tableNumber || null,
-      caption: caption || null,
-      category: selectedCategory,
-      image_url: localPreviewUrl,
-      thumbnail_url: null,
-      status: "approved",
-      likes_count: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    rememberPhoto(optimisticPhoto);
-
     try {
       const optimizedFile = await optimizeImage(selectedFile);
+      if (optimizedFile.size > maxUploadBytes) {
+        setStatus("error");
+        setErrorMessage(t("upload.tooLarge"));
+        return;
+      }
+
       formData.set("photo", optimizedFile);
       setStatus("submitting");
+      await wait(Math.floor(Math.random() * 1800));
 
       const response = await fetch("/api/photos", {
         method: "POST",
+        headers: {
+          "X-Wedding-Client-Id": getWeddingClientId()
+        },
         body: formData
       });
 
       if (response.ok) {
         const data = (await response.json()) as { photo?: PhotoMoment };
-        if (data.photo) {
+        if (data.photo?.status === "approved") {
           rememberPhoto(data.photo);
         }
         setStatus("success");
-        setTimeout(() => {
-          router.push("/gallery");
-        }, 1500);
       } else {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
         setStatus("error");
-        setErrorMessage("Upload failed on the server. Please try again.");
+        setErrorMessage(data?.error || t("upload.serverError"));
       }
     } catch {
       setStatus("error");
-      setErrorMessage("Failed to connect to the server. Check your connection.");
+      setErrorMessage(t("upload.connectionError"));
     } finally {
       isSubmittingRef.current = false;
     }
@@ -179,15 +207,18 @@ export default function UploadPage() {
       eyebrow="Wedding Moments"
       title="Upload a Moment"
       intro="Share your favorite photo from our wedding day. New photos will appear in the gallery shortly."
+      eyebrowKey="upload.eyebrow"
+      titleKey="upload.title"
+      introKey="upload.intro"
     >
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
         {/* Form Pane */}
         <form onSubmit={handleSubmit} className="lg:col-span-3 relative grid gap-5 rounded-card border border-white/50 bg-white/70 backdrop-blur-md p-6 shadow-md sm:p-8">
-          <Field label="Your Name">
+          <Field label={t("write.name")}>
             <input 
               name="guest_name" 
               required 
-              placeholder="Your name" 
+              placeholder={t("write.namePlaceholder")}
               className={inputClass} 
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
@@ -195,10 +226,10 @@ export default function UploadPage() {
           </Field>
           
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Table Number">
+            <Field label={t("write.table")}>
               <input 
                 name="table_number" 
-                placeholder="Optional" 
+                placeholder={t("write.optional")}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 className={inputClass} 
@@ -206,10 +237,10 @@ export default function UploadPage() {
                 onChange={(e) => setTableNumber(e.target.value)}
               />
             </Field>
-            <Field label="Caption">
+            <Field label={t("upload.caption")}>
               <input 
                 name="caption" 
-                placeholder="A short note about this photo" 
+                placeholder={t("upload.captionPlaceholder")}
                 className={inputClass} 
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
@@ -219,7 +250,7 @@ export default function UploadPage() {
 
           {/* Interactive Category Chips */}
           <div className="grid gap-2 text-sm font-medium text-navy/90">
-            <span>Select Category</span>
+            <span>{t("upload.category")}</span>
             <div className="flex flex-wrap gap-2 mt-1">
               {photoCategories.map((cat) => {
                 const isSelected = selectedCategory === cat;
@@ -234,7 +265,7 @@ export default function UploadPage() {
                         : "bg-white/50 text-navy/70 border-ash-pale/60 hover:bg-camel-pale/30"
                     }`}
                   >
-                    {cat}
+                    {tPhotoCategory(cat)}
                   </button>
                 );
               })}
@@ -243,7 +274,7 @@ export default function UploadPage() {
 
           {/* Luxury Upload Dropzone */}
           <div className="grid gap-2 text-sm font-medium text-navy/90">
-            <span>Upload Photo</span>
+            <span>{t("upload.photo")}</span>
             <input 
               ref={fileInputRef}
               type="file" 
@@ -258,10 +289,10 @@ export default function UploadPage() {
             >
               <Upload className="h-10 w-10 text-tweed-soft mb-3 transition-transform group-hover:-translate-y-1" />
               <p className="text-sm font-bold text-navy">
-                {selectedFile ? selectedFile.name : "Click to select a photo"}
+                {selectedFile ? selectedFile.name : t("upload.pick")}
               </p>
               <p className="text-xs text-navy/50 mt-1.5">
-                JPG, PNG, or WEBP (Max 10 MB)
+                {t("upload.help")}
               </p>
             </div>
           </div>
@@ -273,19 +304,19 @@ export default function UploadPage() {
               onChange={(event) => setConsent(event.target.checked)}
               className="mt-1 h-4 w-4 rounded border-ash-pale text-navy accent-navy focus:ring-0"
             />
-            <span>I agree that my photo may be displayed in Jajah &amp; Smart&apos;s wedding gallery.</span>
+            <span>{t("upload.consent")}</span>
           </label>
           
           <Button type="submit" disabled={status === "optimizing" || status === "submitting"} className="gap-2 mt-2">
             <Upload className="h-4 w-4" />
-            Upload Moment
+            {t("upload.button")}
           </Button>
         </form>
 
         {/* Live Photo Preview Pane */}
         <div className="lg:col-span-2 sticky top-24 flex flex-col gap-4">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-tweed/80 px-1">
-            Photo Card Preview
+            {t("upload.preview")}
           </p>
           <div className="glass-card rounded-card overflow-hidden shadow-xl bg-white/95 border border-white/60 transition-all duration-300">
             <div className="relative overflow-hidden bg-camel-pale/25 min-h-[160px] flex items-center justify-center">
@@ -298,20 +329,20 @@ export default function UploadPage() {
                 />
               ) : (
                 <div className="p-12 text-center text-navy/35">
-                  <p className="text-sm font-serif italic">Your uploaded moment will appear here...</p>
+                  <p className="text-sm font-serif italic">{t("upload.previewEmpty")}</p>
                 </div>
               )}
             </div>
             <div className="p-5">
               <span className="rounded-full bg-tweed/10 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-tweed">
-                {selectedCategory}
+                {tPhotoCategory(selectedCategory)}
               </span>
               <p className="mt-3 font-sans text-sm leading-relaxed text-navy min-h-[40px] break-words">
-                {caption || "No caption added yet..."}
+                {caption || t("upload.noCaption")}
               </p>
               <div className="mt-5 flex items-center justify-between border-t border-ash-pale/50 pt-4 text-[11px] text-navy/60">
-                <p className="font-medium">Shared by <span className="font-semibold text-navy/80">{guestName || "Guest Name"}</span></p>
-                {tableNumber && <p className="font-semibold">Table {tableNumber}</p>}
+                <p className="font-medium">{t("upload.sharedBy")} <span className="font-semibold text-navy/80">{guestName || t("write.previewGuest")}</span></p>
+                {tableNumber && <p className="font-semibold">{t("common.table")} {tableNumber}</p>}
               </div>
             </div>
           </div>
@@ -325,36 +356,44 @@ export default function UploadPage() {
             {status === "optimizing" && (
               <div className="flex flex-col items-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-tweed" />
-                <h3 className="text-lg font-semibold text-navy">Preparing Photo...</h3>
-                <p className="text-sm text-navy/60">Optimizing image size and resolution for fast uploads.</p>
+                <h3 className="text-lg font-semibold text-navy">{t("upload.preparing")}</h3>
+                <p className="text-sm text-navy/60">{t("upload.preparingText")}</p>
               </div>
             )}
 
             {status === "submitting" && (
               <div className="flex flex-col items-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-tweed" />
-                <h3 className="text-lg font-semibold text-navy">Uploading Photo...</h3>
-                <p className="text-sm text-navy/60">Uploading your moment to Google Drive. This may take a few seconds.</p>
+                <h3 className="text-lg font-semibold text-navy">{t("upload.uploading")}</h3>
+                <p className="text-sm text-navy/60">{t("upload.uploadingText")}</p>
               </div>
             )}
 
             {status === "success" && (
               <div className="flex flex-col items-center gap-4">
                 <CheckCircle2 className="h-12 w-12 text-emerald-600 animate-scale-up" />
-                <h3 className="text-lg font-semibold text-navy">Uploaded Successfully!</h3>
-                <p className="text-sm text-navy/60">Thank you for sharing this beautiful moment. Redirecting to gallery...</p>
+                <h3 className="text-lg font-semibold text-navy">{t("upload.success")}</h3>
+                <p className="text-sm text-navy/60">{t("upload.successText")}</p>
+                <div className="grid w-full gap-3 pt-2 sm:grid-cols-2">
+                  <ButtonLink href="/gallery" className="w-full">
+                    {t("upload.viewGallery")}
+                  </ButtonLink>
+                  <Button type="button" variant="secondary" onClick={resetUploadForm} className="w-full">
+                    {t("upload.uploadAnother")}
+                  </Button>
+                </div>
               </div>
             )}
 
             {status === "error" && (
               <div className="flex flex-col items-center gap-4">
                 <XCircle className="h-12 w-12 text-rose-600" />
-                <h3 className="text-lg font-semibold text-navy">Upload Failed</h3>
+                <h3 className="text-lg font-semibold text-navy">{t("upload.error")}</h3>
                 <p className="text-sm text-rose-700/80 bg-rose-50 border border-rose-100 rounded-card p-3 w-full">
-                  {errorMessage || "Could not upload your photo. Please try again."}
+                  {errorMessage || t("upload.defaultError")}
                 </p>
                 <Button onClick={() => setStatus("idle")} className="mt-2 w-full">
-                  Go Back & Edit
+                  {t("write.back")}
                 </Button>
               </div>
             )}

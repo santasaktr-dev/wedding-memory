@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { WishCard } from "@/components/wish-card";
+import { useLanguage } from "@/components/language-provider";
 import { wishTypes } from "@/lib/types";
-import type { Wish } from "@/lib/types";
+import type { Wish, WishType } from "@/lib/types";
 
 const cacheKey = "js-wedding-visible-wishes";
 const recentKey = "js-wedding-recent-wishes";
@@ -13,7 +14,9 @@ function readStoredWishes(key: string) {
 
   try {
     return (JSON.parse(window.sessionStorage.getItem(key) || "[]") as Wish[]).filter(
-      (wish) => Date.now() - new Date(wish.created_at).getTime() < 15 * 60 * 1000
+      (wish) =>
+        wish.status === "approved" &&
+        Date.now() - new Date(wish.created_at).getTime() < 15 * 60 * 1000
     );
   } catch {
     return [];
@@ -25,19 +28,8 @@ function mergeWishes(primary: Wish[], secondary: Wish[]) {
   const result: Wish[] = [];
   const all = [...primary, ...secondary];
 
-  const realSignatures = new Set<string>();
-  all.forEach((wish) => {
-    if (wish.id && !wish.id.startsWith("optimistic-")) {
-      realSignatures.add(`${wish.guest_name}-${wish.message}`);
-    }
-  });
-
   all.forEach((wish) => {
     const sig = `${wish.guest_name}-${wish.message}`;
-    if (wish.id && wish.id.startsWith("optimistic-") && realSignatures.has(sig)) {
-      return;
-    }
-
     const dupKey = wish.id || sig;
     if (seen.has(dupKey)) return;
     seen.add(dupKey);
@@ -62,6 +54,7 @@ function WishSkeleton() {
 }
 
 export function MemoryWallFeed() {
+  const { t, tWishType } = useLanguage();
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedType, setSelectedType] = useState<string>("All");
@@ -104,7 +97,7 @@ export function MemoryWallFeed() {
     return wishes.filter((wish) => wish.message_type === selectedType);
   }, [wishes, selectedType]);
 
-  const tabs = ["All", ...wishTypes];
+  const tabs: Array<"All" | WishType> = ["All", ...wishTypes];
   const skeletons = useMemo(() => Array.from({ length: 3 }, (_, index) => index), []);
 
   if (loading) {
@@ -120,7 +113,7 @@ export function MemoryWallFeed() {
   if (!wishes.length) {
     return (
       <div className="rounded-card border border-tweed/20 bg-ivory-warm p-8 text-navy/70 shadow-card">
-        No wishes yet. Be the first to leave a message for Jajah &amp; Smart.
+        {t("wall.empty")}
       </div>
     );
   }
@@ -141,7 +134,7 @@ export function MemoryWallFeed() {
                   : "border-tweed/20 bg-ivory-warm/40 text-navy/70 hover:border-tweed/50 hover:bg-ivory-warm"
               }`}
             >
-              {tab === "All" ? "All Messages" : tab}
+              {tab === "All" ? t("wall.all") : tWishType(tab)}
             </button>
           );
         })}
@@ -155,10 +148,9 @@ export function MemoryWallFeed() {
         </div>
       ) : (
         <div className="rounded-card border border-tweed/15 bg-ivory-warm/50 p-8 text-center text-sm text-navy/60">
-          No wishes found in this category.
+          {t("wall.none")}
         </div>
       )}
     </div>
   );
 }
-

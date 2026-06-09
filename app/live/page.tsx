@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Heart, MessageSquare, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Heart, Images, MessageSquare, Image as ImageIcon, Sparkles, type LucideIcon } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import type { Wish, PhotoMoment } from "@/lib/types";
 
 type ProjectorItem = {
@@ -16,8 +17,39 @@ type ProjectorItem = {
   image_url?: string;
   type: "wish" | "photo";
   likes_count: number;
+  is_pinned?: boolean;
   created_at: string;
 };
+
+type LiveViewMode = "all" | "wishes" | "photos" | "cloud";
+
+function projectorMessageClass(message = "") {
+  const isThai = containsThai(message);
+
+  if (message.length > 520) {
+    return isThai
+      ? "text-[clamp(1.35rem,2.1vw,2rem)] leading-[1.85]"
+      : "text-xl leading-relaxed md:text-2xl lg:text-3xl";
+  }
+
+  if (message.length > 260) {
+    return isThai
+      ? "text-[clamp(1.65rem,2.5vw,2.75rem)] leading-[1.75]"
+      : "text-2xl leading-relaxed md:text-3xl lg:text-4xl";
+  }
+
+  return isThai
+    ? "text-[clamp(2rem,3vw,3.5rem)] leading-[1.58]"
+    : "text-3xl leading-relaxed md:text-4xl lg:text-5xl";
+}
+
+function containsThai(value = "") {
+  return /[\u0E00-\u0E7F]/.test(value);
+}
+
+function textFontClass(value = "") {
+  return containsThai(value) ? "font-sans" : "font-serif";
+}
 
 function extractKeywords(wishes: ProjectorItem[]) {
   // Define normalized representations of keywords to capture and group
@@ -86,10 +118,13 @@ function extractKeywords(wishes: ProjectorItem[]) {
 }
 
 export default function LiveProjectorPage() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<ProjectorItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"slideshow" | "cloud">("slideshow");
+  const [viewMode, setViewMode] = useState<LiveViewMode>("all");
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [qrTarget, setQrTarget] = useState("");
   const [newToast, setNewToast] = useState<{
     guestName: string;
     type: "wish" | "photo";
@@ -97,9 +132,39 @@ export default function LiveProjectorPage() {
     tableNumber: string | null;
   } | null>(null);
 
-  // Fetch wishes and photos
   useEffect(() => {
+    setQrTarget(`${window.location.origin}/qr`);
+  }, []);
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    function showControls() {
+      setControlsVisible(true);
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => setControlsVisible(false), 3000);
+    }
+
+    showControls();
+    window.addEventListener("mousemove", showControls);
+    window.addEventListener("touchstart", showControls);
+    window.addEventListener("keydown", showControls);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("mousemove", showControls);
+      window.removeEventListener("touchstart", showControls);
+      window.removeEventListener("keydown", showControls);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     async function fetchFeed() {
+      let nextDelay = 30000;
+
       try {
         const [wishesRes, photosRes] = await Promise.all([
           fetch("/api/wall", { cache: "no-store" }),
@@ -117,7 +182,8 @@ export default function LiveProjectorPage() {
 
           combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-          setItems((prev) => {
+          if (!cancelled) {
+            setItems((prev) => {
             if (prev.length > 0 && combined.length > 0) {
               const newItems = combined.filter((newItem) => !prev.some((oldItem) => oldItem.id === newItem.id));
               if (newItems.length > 0) {
@@ -132,28 +198,51 @@ export default function LiveProjectorPage() {
               }
             }
             return combined;
-          });
+            });
+          }
+        } else {
+          nextDelay = 45000;
         }
       } catch (err) {
         console.error("Failed to load projector feed:", err);
+        nextDelay = 60000;
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          timeoutId = setTimeout(fetchFeed, nextDelay);
+        }
       }
     }
 
     fetchFeed();
-    const interval = setInterval(fetchFeed, 20000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
   // Slide loop timer
   useEffect(() => {
-    if (items.length <= 1) return;
+    const visibleItems = items.filter((item) => {
+      if (viewMode === "wishes") return item.type === "wish";
+      if (viewMode === "photos") return item.type === "photo";
+      return viewMode !== "cloud";
+    });
+    if (visibleItems.length <= 1) return;
     const interval = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % items.length);
+      setActiveIndex((prev) => (prev + 1) % visibleItems.length);
     }, 6000);
     return () => clearInterval(interval);
-  }, [items.length]);
+  }, [items, viewMode]);
+
+  useEffect(() => {
+    const visibleLength = items.filter((item) => {
+      if (viewMode === "wishes") return item.type === "wish";
+      if (viewMode === "photos") return item.type === "photo";
+      return viewMode !== "cloud";
+    }).length;
+    setActiveIndex((currentIndex) => (visibleLength ? currentIndex % visibleLength : 0));
+  }, [items, viewMode]);
 
   if (loading && !items.length) {
     return (
@@ -216,47 +305,92 @@ export default function LiveProjectorPage() {
   });
 
   const displayKeywords = mergedKeywords.slice(0, 28);
+  const visibleItems = items.filter((item) => {
+    if (viewMode === "wishes") return item.type === "wish";
+    if (viewMode === "photos") return item.type === "photo";
+    return viewMode !== "cloud";
+  });
+  const activeItems =
+    viewMode === "cloud"
+      ? []
+      : visibleItems.flatMap((item) => (item.is_pinned ? [item, { ...item, id: `${item.id}-pinned-repeat` }] : [item]));
+
+  const modeButtons: Array<{
+    mode: LiveViewMode;
+    label: string;
+    icon: LucideIcon;
+  }> = [
+    { mode: "all", label: t("live.modeAll"), icon: Sparkles },
+    { mode: "wishes", label: t("live.modeWishes"), icon: MessageSquare },
+    { mode: "photos", label: t("live.modePhotos"), icon: Images },
+    { mode: "cloud", label: t("live.modeCloud"), icon: Sparkles }
+  ];
 
   return (
     <main className="relative flex min-h-screen w-screen overflow-hidden bg-gradient-to-br from-ivory to-camel-pale/30 text-navy transition-all duration-1000">
       
       {/* Floating View Switcher Tab Bar at top center */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-full border border-white/60 bg-white/75 backdrop-blur-md p-1 shadow-md hover:shadow-lg transition-all duration-300">
-        <button
-          onClick={() => setViewMode("slideshow")}
-          className={`flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-full tracking-wider transition-all duration-300 ${
-            viewMode === "slideshow"
-              ? "bg-navy text-ivory-warm shadow"
-              : "text-navy/60 hover:bg-camel-pale/30"
-          }`}
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          <span>Slideshow</span>
-        </button>
-        <button
-          onClick={() => setViewMode("cloud")}
-          className={`flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-full tracking-wider transition-all duration-300 ${
-            viewMode === "cloud"
-              ? "bg-navy text-ivory-warm shadow"
-              : "text-navy/60 hover:bg-camel-pale/30"
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>Word Cloud</span>
-        </button>
+      <div
+        className={`absolute top-4 left-1/2 z-30 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-white/60 bg-white/75 p-1 shadow-md backdrop-blur-md transition-all duration-500 md:top-6 ${
+          controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-4 opacity-0"
+        }`}
+      >
+        {modeButtons.map((button) => {
+          const Icon = button.icon;
+
+          return (
+            <button
+              key={button.mode}
+              onClick={() => setViewMode(button.mode)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold transition-all duration-300 md:px-4 md:text-xs ${
+                viewMode === button.mode
+                  ? "bg-navy text-ivory-warm shadow"
+                  : "text-navy/60 hover:bg-camel-pale/30"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span>{button.label}</span>
+            </button>
+          );
+        })}
       </div>
 
+      {qrTarget ? (
+        <div
+          className={`absolute bottom-6 right-6 z-30 hidden w-36 rounded-card border border-white/70 bg-white/82 p-3 text-center shadow-card backdrop-blur-md transition-all duration-500 lg:block ${
+            controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
+          }`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(qrTarget)}`}
+            alt="QR code for guest submissions"
+            className="mx-auto h-24 w-24 rounded-[8px] bg-white"
+          />
+          <p className="mt-2 text-xs font-bold text-navy">{t("live.qrTitle")}</p>
+          <p className="mt-0.5 text-[10px] leading-4 text-navy/52">{t("live.qrText")}</p>
+        </div>
+      ) : null}
+
       {/* Decorative header */}
-      <div className="absolute left-10 top-8 z-10 flex items-center gap-3 select-none">
+      <div
+        className={`absolute left-10 top-8 z-10 hidden items-center gap-3 select-none transition-opacity duration-500 lg:flex ${
+          controlsVisible ? "opacity-100" : "opacity-0"
+        }`}
+      >
         <div className="rounded-full bg-tweed/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.22em] text-tweed">
           Live Memory Wall
         </div>
         <p className="text-sm font-semibold tracking-wider text-navy/55">Jajah &amp; Smart</p>
       </div>
 
-      {viewMode === "slideshow" && (
-        <div className="absolute right-10 top-8 z-10 text-xs font-semibold tracking-[0.16em] text-navy/40 select-none">
-          Slide {activeIndex + 1} of {items.length}
+      {viewMode !== "cloud" && (
+        <div
+          className={`absolute right-10 top-8 z-10 hidden text-xs font-semibold tracking-[0.16em] text-navy/40 select-none transition-opacity duration-500 lg:block ${
+            controlsVisible ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          Slide {activeItems.length ? activeIndex + 1 : 0} of {activeItems.length}
         </div>
       )}
 
@@ -264,11 +398,21 @@ export default function LiveProjectorPage() {
       <div className="flex w-full items-center justify-center px-8 py-24 md:px-16 lg:px-24">
         
         {/* Mode 1: Slideshow View */}
-        {viewMode === "slideshow" && (
+        {viewMode !== "cloud" && (
           <div className="flex-grow flex items-center justify-center w-full max-w-6xl mx-auto">
-            {items.map((item, index) => {
+            {!activeItems.length ? (
+              <div className="rounded-card border border-white/60 bg-white/70 p-10 text-center shadow-card backdrop-blur-md">
+                <MessageSquare className="mx-auto h-12 w-12 text-tweed/35" />
+                <p className="mt-4 text-lg font-semibold text-navy">Waiting for submissions</p>
+                <p className="mt-2 text-sm text-navy/55">Scan the QR code to add a wish or photo.</p>
+              </div>
+            ) : null}
+            {activeItems.map((item, index) => {
               const isActive = index === activeIndex;
               if (!isActive) return null;
+              const messageText = item.message || "";
+              const captionText = item.caption || "";
+              const itemHasThai = containsThai(messageText) || containsThai(captionText);
 
               return (
                 <div
@@ -277,21 +421,21 @@ export default function LiveProjectorPage() {
                 >
                   {item.type === "wish" ? (
                     /* Wish Card Layout - Elegant Minimalist Board */
-                    <div className="relative flex flex-col justify-between rounded-card border border-white/50 bg-white/70 backdrop-blur-lg p-12 shadow-2xl w-full max-w-4xl min-h-[420px] text-center">
-                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-full bg-navy p-4 text-ivory-warm shadow-lg">
+                    <div className="relative flex min-h-[58vh] max-h-[78vh] w-full max-w-4xl flex-col justify-between overflow-hidden rounded-card border border-white/50 bg-white/70 p-8 pt-20 text-center shadow-2xl backdrop-blur-lg md:p-12 md:pt-24">
+                      <div className="absolute left-1/2 top-6 -translate-x-1/2 rounded-full bg-navy p-4 text-ivory-warm shadow-lg">
                         <MessageSquare className="h-6 w-6" />
                       </div>
-                      <div className="mt-10 flex flex-col justify-center flex-grow">
-                        <span className="font-serif text-8xl text-tweed/10 leading-none mb-1 select-none">&ldquo;</span>
-                        <p className="font-serif text-3xl leading-relaxed text-navy md:text-4xl lg:text-5xl px-6 md:px-12 animate-fade-in-up">
+                      <div className="flex min-h-0 flex-grow flex-col justify-center">
+                        <p className={`mx-auto max-w-4xl overflow-hidden break-words px-2 text-navy md:px-8 ${textFontClass(messageText)} ${projectorMessageClass(messageText)}`}>
                           {item.message}
                         </p>
-                        <span className="font-serif text-8xl text-tweed/10 leading-none mt-1 select-none">&rdquo;</span>
                       </div>
                       <div className="mt-8 flex flex-col items-center justify-center">
-                        <p className="text-xl font-bold bg-gradient-to-r from-navy to-tweed bg-clip-text text-transparent">— {item.guest_name}</p>
+                        <p className={`text-xl font-bold ${itemHasThai ? "text-navy" : "bg-gradient-to-r from-navy to-tweed bg-clip-text text-transparent"}`}>
+                          — {item.guest_name}
+                        </p>
                         {item.relationship || item.table_number ? (
-                          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-navy/40">
+                          <p className={`mt-2 text-xs font-semibold text-navy/40 ${itemHasThai ? "" : "uppercase tracking-[0.2em]"}`}>
                             {item.relationship} {item.table_number ? `· Table ${item.table_number}` : ""}
                           </p>
                         ) : null}
@@ -308,11 +452,18 @@ export default function LiveProjectorPage() {
                     <div className="grid h-full w-full grid-cols-1 overflow-hidden rounded-card border border-white/50 bg-white/75 backdrop-blur-lg shadow-2xl md:grid-cols-2">
                       {/* Image pane */}
                       <div className="relative overflow-hidden flex items-center justify-center bg-camel-pale/10 p-4 min-h-[350px] md:h-full">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-navy/28">
+                          <ImageIcon className="h-16 w-16" />
+                          <p className="text-sm font-semibold">Shared wedding photo</p>
+                        </div>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={item.image_url}
                           alt={item.caption || "Shared moment"}
                           className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-lg animate-ken-burns z-10"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
                         />
                         <div className="absolute top-6 left-6 rounded-full bg-navy p-3 text-ivory-warm shadow-lg z-20">
                           <ImageIcon className="h-5 w-5" />
@@ -321,17 +472,19 @@ export default function LiveProjectorPage() {
                       {/* Photo details pane */}
                       <div className="flex flex-col justify-between p-10 md:p-16 lg:p-20 bg-ivory-warm/40">
                         <div className="animate-fade-in-up">
-                          <span className="rounded-full bg-tweed/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-tweed">
+                          <span className={`rounded-full bg-tweed/10 px-3 py-1 text-[10px] font-bold text-tweed ${itemHasThai ? "" : "uppercase tracking-[0.2em]"}`}>
                             {item.category || "Couple Moment"}
                           </span>
-                          <h2 className="mt-8 font-serif text-3xl leading-relaxed text-navy md:text-4xl lg:text-5xl font-semibold">
+                          <h2 className={`mt-8 text-3xl leading-relaxed text-navy md:text-4xl lg:text-5xl font-semibold ${textFontClass(captionText)}`}>
                             {item.caption ? `“${item.caption}”` : "Shared a beautiful moment!"}
                           </h2>
                         </div>
                         <div className="mt-10 border-t border-ash-pale/50 pt-8 animate-fade-in-up">
-                          <p className="text-xl font-bold bg-gradient-to-r from-navy to-tweed bg-clip-text text-transparent">— {item.guest_name}</p>
+                          <p className={`text-xl font-bold ${itemHasThai ? "text-navy" : "bg-gradient-to-r from-navy to-tweed bg-clip-text text-transparent"}`}>
+                            — {item.guest_name}
+                          </p>
                           {item.table_number && (
-                            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-navy/40">
+                            <p className={`mt-2 text-xs font-semibold text-navy/40 ${itemHasThai ? "" : "uppercase tracking-[0.2em]"}`}>
                               Table {item.table_number}
                             </p>
                           )}

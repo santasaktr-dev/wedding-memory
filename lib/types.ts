@@ -41,6 +41,7 @@ export type PhotoMoment = {
   thumbnail_url: string | null;
   status: SubmissionStatus;
   likes_count: number;
+  is_pinned: boolean;
   created_at: string;
   updated_at: string;
 };

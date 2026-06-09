@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { listVisiblePhotos } from "@/lib/google-store";
+import { isPhotoLocallySafeForPublic } from "@/lib/auto-moderation";
+import { listApprovedPhotos } from "@/lib/google-store";
+import { samplePhotos } from "@/lib/mock-data";
 import type { PhotoMoment } from "@/lib/types";
 
-const demoHorizontalPhoto: PhotoMoment = {
+const devDemoHorizontalPhoto: PhotoMoment = {
   id: "demo-horizontal",
   guest_name: "Smart (Demo Landscape)",
   table_number: "9",
@@ -12,6 +14,7 @@ const demoHorizontalPhoto: PhotoMoment = {
   thumbnail_url: null,
   status: "approved",
   likes_count: 0,
+  is_pinned: false,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString()
 };
@@ -19,6 +22,18 @@ const demoHorizontalPhoto: PhotoMoment = {
 let cachedPhotos: PhotoMoment[] | null = null;
 let lastPhotosFetchTime = 0;
 const CACHE_TTL = 15000; // 15 seconds
+const useDevFallback = process.env.NODE_ENV !== "production";
+
+function publicSafePhotos(photos: PhotoMoment[]) {
+  return photos.filter((photo) =>
+    isPhotoLocallySafeForPublic({
+      guestName: photo.guest_name,
+      tableNumber: photo.table_number,
+      caption: photo.caption,
+      category: photo.category
+    })
+  );
+}
 
 export async function GET() {
   const now = Date.now();
@@ -34,8 +49,8 @@ export async function GET() {
   }
 
   try {
-    const dbPhotos = (await listVisiblePhotos()) ?? [];
-    const photos = [demoHorizontalPhoto, ...dbPhotos];
+    const dbPhotos = await listApprovedPhotos();
+    const photos = publicSafePhotos(dbPhotos ?? (useDevFallback ? [devDemoHorizontalPhoto, ...samplePhotos] : []));
     cachedPhotos = photos;
     lastPhotosFetchTime = now;
 
@@ -52,6 +67,8 @@ export async function GET() {
     if (cachedPhotos) {
       return NextResponse.json({ photos: cachedPhotos });
     }
-    return NextResponse.json({ photos: [demoHorizontalPhoto] });
+    return NextResponse.json({
+      photos: useDevFallback ? [devDemoHorizontalPhoto, ...samplePhotos] : []
+    });
   }
 }

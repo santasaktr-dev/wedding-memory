@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Pin, Heart } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
+import { getWeddingClientId } from "@/lib/client-id";
 import type { Wish } from "@/lib/types";
 
 export function WishCard({ wish }: { wish: Wish }) {
+  const { t, tWishType } = useLanguage();
   const [likesCount, setLikesCount] = useState(wish.likes_count || 0);
   const [hasLiked, setHasLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
@@ -47,7 +50,10 @@ export function WishCard({ wish }: { wish: Wish }) {
 
       const res = await fetch("/api/wishes/like", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Wedding-Client-Id": getWeddingClientId()
+        },
         body: JSON.stringify({ id: wish.id, unlike: willUnlike })
       });
 
@@ -68,7 +74,7 @@ export function WishCard({ wish }: { wish: Wish }) {
     <article className="break-inside-avoid glass-card rounded-card p-6 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:bg-white/80">
       <div className="mb-4 flex items-start justify-between gap-3">
         <span className="rounded-full bg-tweed/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-tweed">
-          {wish.message_type}
+          {tWishType(wish.message_type)}
         </span>
         {wish.is_pinned ? <Pin aria-label="Pinned wish" className="h-4 w-4 text-tweed-soft" /> : null}
       </div>
@@ -78,7 +84,7 @@ export function WishCard({ wish }: { wish: Wish }) {
           <p className="font-semibold text-navy">— {wish.guest_name}</p>
           {wish.relationship && (
             <span className="text-[10px] uppercase tracking-wider text-navy/45 mt-0.5">
-              {wish.relationship} {wish.table_number ? `· Table ${wish.table_number}` : ""}
+              {wish.relationship} {wish.table_number ? `· ${t("common.table")} ${wish.table_number}` : ""}
             </span>
           )}
         </div>
@@ -114,4 +120,3 @@ export function WishCard({ wish }: { wish: Wish }) {
     </article>
   );
 }
-

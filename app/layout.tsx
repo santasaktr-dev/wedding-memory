@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
+import { LanguageProvider } from "@/components/language-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -35,10 +36,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${cormorant.variable} ${notoSansThai.variable}`}>
-      <body className="min-h-screen font-sans antialiased">
-        <SiteHeader />
-        <main className="animate-scale-up">{children}</main>
-        <SiteFooter />
+      <body className="min-h-screen pb-20 font-sans antialiased sm:pb-0">
+        <LanguageProvider>
+          <SiteHeader />
+          <main className="animate-scale-up">{children}</main>
+          <SiteFooter />
+        </LanguageProvider>
       </body>
     </html>
   );

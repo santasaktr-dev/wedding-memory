@@ -7,6 +7,9 @@ export default function GalleryPage() {
       eyebrow="Photo Gallery"
       title="Shared Moments"
       intro="Guest-submitted photos from the wedding day, gathered into one quiet gallery."
+      eyebrowKey="gallery.eyebrow"
+      titleKey="gallery.title"
+      introKey="gallery.intro"
     >
       <PhotoGalleryFeed />
     </PageShell>

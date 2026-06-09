@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { likeSubmission, isGoogleStoreConfigured } from "@/lib/google-store";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const limit = checkRateLimit(request, "wish-like", { limit: 80, windowMs: 60 * 1000 });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many likes. Please wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfter) } }
+      );
+    }
+
     const { id, unlike } = (await request.json()) as { id: string; unlike?: boolean };
 
     if (!id) {

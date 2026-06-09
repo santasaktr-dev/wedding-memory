@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PhotoCard } from "@/components/photo-card";
+import { useLanguage } from "@/components/language-provider";
 import { photoCategories } from "@/lib/types";
-import type { PhotoMoment } from "@/lib/types";
+import type { PhotoCategory, PhotoMoment } from "@/lib/types";
 
 const cacheKey = "js-wedding-visible-photos";
 const recentKey = "js-wedding-recent-photos";
@@ -13,7 +14,9 @@ function readStoredPhotos(key: string) {
 
   try {
     return (JSON.parse(window.sessionStorage.getItem(key) || "[]") as PhotoMoment[]).filter(
-      (photo) => Date.now() - new Date(photo.created_at).getTime() < 15 * 60 * 1000
+      (photo) =>
+        photo.status === "approved" &&
+        Date.now() - new Date(photo.created_at).getTime() < 15 * 60 * 1000
     );
   } catch {
     return [];
@@ -25,19 +28,7 @@ function mergePhotos(primary: PhotoMoment[], secondary: PhotoMoment[]) {
   const result: PhotoMoment[] = [];
   const all = [...primary, ...secondary];
 
-  const realSignatures = new Set<string>();
   all.forEach((photo) => {
-    if (photo.id && !photo.id.startsWith("optimistic-")) {
-      realSignatures.add(`${photo.guest_name}-${photo.caption || ""}`);
-    }
-  });
-
-  all.forEach((photo) => {
-    const sig = `${photo.guest_name}-${photo.caption || ""}`;
-    if (photo.id && photo.id.startsWith("optimistic-") && realSignatures.has(sig)) {
-      return;
-    }
-
     const dupKey = photo.id || `${photo.guest_name}-${photo.image_url}`;
     if (seen.has(dupKey)) return;
     seen.add(dupKey);
@@ -61,6 +52,7 @@ function PhotoSkeleton() {
 }
 
 export function PhotoGalleryFeed() {
+  const { t, tPhotoCategory } = useLanguage();
   const [photos, setPhotos] = useState<PhotoMoment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -103,7 +95,7 @@ export function PhotoGalleryFeed() {
     return photos.filter((photo) => photo.category === selectedCategory);
   }, [photos, selectedCategory]);
 
-  const tabs = ["All", ...photoCategories];
+  const tabs: Array<"All" | PhotoCategory> = ["All", ...photoCategories];
   const skeletons = useMemo(() => Array.from({ length: 6 }, (_, index) => index), []);
 
   if (loading) {
@@ -119,7 +111,7 @@ export function PhotoGalleryFeed() {
   if (!photos.length) {
     return (
       <div className="rounded-card border border-tweed/20 bg-ivory-warm p-8 text-navy/70 shadow-card">
-        No moments uploaded yet. Share your favorite photo from the wedding day.
+        {t("gallery.empty")}
       </div>
     );
   }
@@ -140,7 +132,7 @@ export function PhotoGalleryFeed() {
                   : "border-tweed/20 bg-ivory-warm/40 text-navy/70 hover:border-tweed/50 hover:bg-ivory-warm"
               }`}
             >
-              {tab === "All" ? "All Moments" : tab}
+              {tab === "All" ? t("gallery.all") : tPhotoCategory(tab)}
             </button>
           );
         })}
@@ -156,10 +148,9 @@ export function PhotoGalleryFeed() {
         </div>
       ) : (
         <div className="rounded-card border border-tweed/15 bg-ivory-warm/50 p-8 text-center text-sm text-navy/60">
-          No moments found in this category.
+          {t("gallery.none")}
         </div>
       )}
     </div>
   );
 }
-

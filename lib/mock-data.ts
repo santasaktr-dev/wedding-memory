@@ -43,6 +43,7 @@ export const samplePhotos: PhotoMoment[] = [
     thumbnail_url: null,
     status: "approved",
     likes_count: 6,
+    is_pinned: false,
     created_at: "2026-11-01T12:00:00.000Z",
     updated_at: "2026-11-01T12:00:00.000Z"
   },
@@ -50,13 +51,14 @@ export const samplePhotos: PhotoMoment[] = [
     id: "photo-2",
     guest_name: "Friend of the Bride",
     table_number: "2",
-    caption: "Pearl Wedding Avenue in the afternoon light.",
+    caption: "Pearl Wedding Venue in the afternoon light.",
     category: "Ceremony",
     image_url:
       "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=80",
     thumbnail_url: null,
     status: "approved",
     likes_count: 10,
+    is_pinned: false,
     created_at: "2026-11-01T12:30:00.000Z",
     updated_at: "2026-11-01T12:30:00.000Z"
   }

@@ -2,7 +2,7 @@ const SPREADSHEET_ID = "";
 const DRIVE_FOLDER_ID = "";
 const SPREADSHEET_NAME = "J&S Wedding Memory Wall DB";
 const DRIVE_FOLDER_NAME = "J&S Wedding Moment Uploads";
-const SHARED_SECRET = "fa7a61fe740cf4e8a7897f4392d21003247f0258609a93f2";
+const SHARED_SECRET_PROPERTY = "SHARED_SECRET";
 
 const WISH_HEADERS = [
   "id",
@@ -28,6 +28,7 @@ const PHOTO_HEADERS = [
   "thumbnail_url",
   "status",
   "likes_count",
+  "is_pinned",
   "created_at",
   "updated_at"
 ];
@@ -49,6 +50,7 @@ function doPost(e) {
       });
     }
     if (action === "moderate") return json(moderate(payload));
+    if (action === "pinSubmission") return json(pinSubmission(payload));
     if (action === "getPhotoBytes") return json(getPhotoBytes(payload));
     if (action === "likeSubmission") return json(likeSubmission(payload));
 
@@ -70,7 +72,7 @@ function createWish(payload) {
     payload.table_number || "",
     payload.message_type || "Wedding Wish",
     payload.message || "",
-    "approved",
+    validStatus(payload.status),
     0,
     false,
     now,
@@ -102,8 +104,9 @@ function createPhoto(payload) {
     payload.category || "Couple Moment",
     imageUrl,
     "",
-    "approved",
+    validStatus(payload.status),
     0,
+    false,
     now,
     now
   ]);
@@ -153,6 +156,26 @@ function moderate(payload) {
   return { ok: false, error: "Not found" };
 }
 
+function pinSubmission(payload) {
+  const sheetName = payload.content_type === "photo" ? "photos" : "wishes";
+  const headers = payload.content_type === "photo" ? PHOTO_HEADERS : WISH_HEADERS;
+  const sheet = getSheet(sheetName, headers);
+  const values = sheet.getDataRange().getValues();
+  const idIndex = headers.indexOf("id");
+  const pinnedIndex = headers.indexOf("is_pinned");
+  const updatedAtIndex = headers.indexOf("updated_at");
+
+  for (let row = 1; row < values.length; row += 1) {
+    if (values[row][idIndex] === payload.id) {
+      sheet.getRange(row + 1, pinnedIndex + 1).setValue(payload.is_pinned === true || payload.is_pinned === "true");
+      sheet.getRange(row + 1, updatedAtIndex + 1).setValue(new Date().toISOString());
+      return { ok: true };
+    }
+  }
+
+  return { ok: false, error: "Not found" };
+}
+
 function getSheet(name, headers) {
   const spreadsheet = getSpreadsheet();
   let sheet = spreadsheet.getSheetByName(name);
@@ -163,9 +186,22 @@ function getSheet(name, headers) {
 
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
+  } else {
+    ensureHeaders(sheet, headers);
   }
 
   return sheet;
+}
+
+function ensureHeaders(sheet, headers) {
+  let currentHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  headers.forEach((header, index) => {
+    if (currentHeaders.indexOf(header) === -1) {
+      sheet.insertColumnBefore(index + 1);
+      sheet.getRange(1, index + 1).setValue(header);
+      currentHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+    }
+  });
 }
 
 function getSpreadsheet() {
@@ -195,7 +231,8 @@ function getUploadFolder() {
 }
 
 function assertSecret(secret) {
-  if (SHARED_SECRET && secret !== SHARED_SECRET) {
+  const sharedSecret = PropertiesService.getScriptProperties().getProperty(SHARED_SECRET_PROPERTY);
+  if (sharedSecret && secret !== sharedSecret) {
     throw new Error("Unauthorized");
   }
 }
@@ -208,6 +245,14 @@ function json(payload, statusCode) {
 function extensionFromName(fileName) {
   const parts = String(fileName).split(".");
   return parts.length > 1 ? parts.pop() : "jpg";
+}
+
+function validStatus(status) {
+  const value = String(status || "pending");
+  if (value === "pending" || value === "approved" || value === "hidden" || value === "deleted") {
+    return value;
+  }
+  return "pending";
 }
 
 function getPhotoBytes(payload) {

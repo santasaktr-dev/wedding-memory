@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Heart } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 
 export function SiteFooter() {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   // Hide the footer on the live presentation projector page
   if (pathname === "/live") return null;
@@ -26,30 +28,30 @@ export function SiteFooter() {
             J&amp;S
           </Link>
           <p className="font-serif italic text-xs text-tweed-soft mt-1">
-            “Thank you for being a part of our story.”
+            “{t("footer.thanks")}”
           </p>
         </div>
 
         {/* Elegant Navigation Links */}
         <nav aria-label="Footer navigation" className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mb-8 text-xs tracking-wider font-semibold text-navy/70 uppercase">
           <Link href="/write" className="hover:text-tweed hover:-translate-y-0.5 transition-all duration-300">
-            Write Wish
+            {t("footer.write")}
           </Link>
           <span className="text-ash/60 text-[10px] hidden sm:inline">•</span>
           <Link href="/wall" className="hover:text-tweed hover:-translate-y-0.5 transition-all duration-300">
-            Memory Wall
+            {t("footer.wall")}
           </Link>
           <span className="text-ash/60 text-[10px] hidden sm:inline">•</span>
           <Link href="/upload" className="hover:text-tweed hover:-translate-y-0.5 transition-all duration-300">
-            Upload Moment
+            {t("footer.upload")}
           </Link>
           <span className="text-ash/60 text-[10px] hidden sm:inline">•</span>
           <Link href="/gallery" className="hover:text-tweed hover:-translate-y-0.5 transition-all duration-300">
-            Gallery
+            {t("footer.gallery")}
           </Link>
           <span className="text-ash/60 text-[10px] hidden sm:inline">•</span>
           <Link href="/from-us" className="hover:text-tweed hover:-translate-y-0.5 transition-all duration-300 text-tweed font-bold">
-            From us
+            {t("footer.fromUs")}
           </Link>
         </nav>
 
@@ -58,13 +60,12 @@ export function SiteFooter() {
           <p className="font-serif font-bold text-tweed text-[12px] normal-case tracking-normal">
             Jajah &amp; Smart
           </p>
-          <p>Sunday, 1 November 2026</p>
+          <p>{t("common.date")}</p>
           <p className="text-[10px] text-navy/40 mt-3 normal-case tracking-normal font-sans font-light">
-            © 2026 Jajah &amp; Smart Wedding Memory. All rights reserved.
+            {t("footer.rights")}
           </p>
         </div>
       </div>
     </footer>
   );
 }
-

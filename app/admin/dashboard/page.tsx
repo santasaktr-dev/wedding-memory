@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, EyeOff, LogOut, Trash2 } from "lucide-react";
+import { Eye, EyeOff, LogOut, Trash2 } from "lucide-react";
 import { Button, PageShell, StatusBadge } from "@/components/ui";
 import type { PhotoMoment, SubmissionStatus, Wish } from "@/lib/types";
 
@@ -35,11 +35,11 @@ export default function AdminDashboardPage() {
       { label: "Total wishes", value: wishes.length },
       { label: "Total photos", value: photos.length },
       {
-        label: "New submissions",
-        value: wishes.filter((wish) => wish.status === "pending").length + photos.filter((photo) => photo.status === "pending").length
+        label: "Visible now",
+        value: wishes.filter((wish) => wish.status === "approved").length + photos.filter((photo) => photo.status === "approved").length
       },
-      { label: "Hidden wishes", value: wishes.filter((wish) => wish.status === "hidden").length },
-      { label: "Hidden photos", value: photos.filter((photo) => photo.status === "hidden").length }
+      { label: "Pending", value: wishes.filter((wish) => wish.status === "pending").length + photos.filter((photo) => photo.status === "pending").length },
+      { label: "Blocked", value: wishes.filter((wish) => wish.status === "hidden").length + photos.filter((photo) => photo.status === "hidden").length }
     ],
     [photos, wishes]
   );
@@ -69,8 +69,8 @@ export default function AdminDashboardPage() {
   return (
     <PageShell
       eyebrow="Admin Dashboard"
-      title="Moderation"
-      intro="Review, hide, or delete guest submissions after they arrive."
+      title="Submissions"
+      intro="Guest submissions appear after moderation. Use this page to approve, block, restore, or delete items."
     >
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -92,7 +92,7 @@ export default function AdminDashboardPage() {
         <AdminPanel title="Wishes">
           <div className="grid gap-3">
             {wishes.map((wish) => (
-              <div key={wish.id} className="rounded-card border border-tweed/20 bg-ivory-warm p-4">
+              <div key={wish.id} className={`rounded-card border p-4 ${statusPanelClass(wish.status)}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-navy">{wish.guest_name}</p>
@@ -101,7 +101,7 @@ export default function AdminDashboardPage() {
                   <StatusBadge status={wish.status} />
                 </div>
                 <p className="mt-3 text-sm leading-6 text-navy/75">{wish.message}</p>
-                <ModerationActions onApprove={() => updateWish(wish.id, "approved")} onHide={() => updateWish(wish.id, "hidden")} onDelete={() => updateWish(wish.id, "deleted")} />
+                <ModerationActions onRestore={() => updateWish(wish.id, "approved")} onHide={() => updateWish(wish.id, "hidden")} onDelete={() => updateWish(wish.id, "deleted")} />
               </div>
             ))}
           </div>
@@ -110,7 +110,7 @@ export default function AdminDashboardPage() {
         <AdminPanel title="Photos">
           <div className="grid gap-3">
             {photos.map((photo) => (
-              <div key={photo.id} className="rounded-card border border-tweed/20 bg-ivory-warm p-4">
+              <div key={photo.id} className={`rounded-card border p-4 ${statusPanelClass(photo.status)}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-navy">{photo.guest_name}</p>
@@ -122,7 +122,7 @@ export default function AdminDashboardPage() {
                 <Link href={photo.image_url} className="mt-2 inline-block text-sm text-tweed hover:text-navy">
                   View image
                 </Link>
-                <ModerationActions onApprove={() => updatePhoto(photo.id, "approved")} onHide={() => updatePhoto(photo.id, "hidden")} onDelete={() => updatePhoto(photo.id, "deleted")} />
+                <ModerationActions onRestore={() => updatePhoto(photo.id, "approved")} onHide={() => updatePhoto(photo.id, "hidden")} onDelete={() => updatePhoto(photo.id, "deleted")} />
               </div>
             ))}
           </div>
@@ -141,19 +141,30 @@ function AdminPanel({ title, children }: { title: string; children: React.ReactN
   );
 }
 
+function statusPanelClass(status: SubmissionStatus) {
+  const styles: Record<SubmissionStatus, string> = {
+    approved: "border-emerald-200 bg-emerald-50/55",
+    pending: "border-amber-200 bg-amber-50/70",
+    hidden: "border-rose-200 bg-rose-50/75",
+    deleted: "border-zinc-200 bg-zinc-50"
+  };
+
+  return styles[status];
+}
+
 function ModerationActions({
-  onApprove,
+  onRestore,
   onHide,
   onDelete
 }: {
-  onApprove: () => void;
+  onRestore: () => void;
   onHide: () => void;
   onDelete: () => void;
 }) {
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      <Button type="button" onClick={onApprove} className="min-h-10 gap-2 px-3 py-2">
-        <Check className="h-4 w-4" /> Approve
+      <Button type="button" onClick={onRestore} className="min-h-10 gap-2 px-3 py-2">
+        <Eye className="h-4 w-4" /> Restore
       </Button>
       <Button type="button" variant="secondary" onClick={onHide} className="min-h-10 gap-2 px-3 py-2">
         <EyeOff className="h-4 w-4" /> Hide

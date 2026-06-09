@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Heart } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
+import { getWeddingClientId } from "@/lib/client-id";
 import type { PhotoMoment } from "@/lib/types";
 
 export function PhotoCard({ photo }: { photo: PhotoMoment }) {
+  const { t, tPhotoCategory } = useLanguage();
   const imageUrl = photo.thumbnail_url || photo.image_url;
   const [isLoaded, setIsLoaded] = useState(false);
   const [likesCount, setLikesCount] = useState(photo.likes_count || 0);
@@ -56,7 +59,10 @@ export function PhotoCard({ photo }: { photo: PhotoMoment }) {
 
       const res = await fetch("/api/photos/like", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Wedding-Client-Id": getWeddingClientId()
+        },
         body: JSON.stringify({ id: photo.id, unlike: willUnlike })
       });
 
@@ -98,14 +104,14 @@ export function PhotoCard({ photo }: { photo: PhotoMoment }) {
       <div className="p-5">
         <div className="flex items-center justify-between gap-2">
           <span className="rounded-full bg-tweed/10 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-tweed">
-            {photo.category || "Moment"}
+            {photo.category ? tPhotoCategory(photo.category) : t("common.moment")}
           </span>
         </div>
         {photo.caption ? (
           <p className="mt-3 font-sans text-sm leading-relaxed text-navy/85">{photo.caption}</p>
         ) : null}
         <div className="mt-5 flex items-center justify-between border-t border-ash-pale/40 pt-4 text-[11px] text-navy/60">
-          <p className="font-medium">Shared by <span className="font-semibold text-navy/80">{photo.guest_name}</span></p>
+          <p className="font-medium">{t("upload.sharedBy")} <span className="font-semibold text-navy/80">{photo.guest_name}</span></p>
           <div className="relative">
             {floatingHearts.map((heart) => (
               <span

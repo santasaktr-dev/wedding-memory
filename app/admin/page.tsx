@@ -22,18 +22,21 @@ export default function AdminLoginPage() {
       return;
     }
 
-    router.push("/admin/dashboard");
+    router.push("/dashboard");
   }
 
   return (
     <PageShell
       eyebrow="Admin"
       title="Sign In"
-      intro="Manage guest wishes and photo submissions after they arrive."
+      intro="Hide, restore, or remove guest wishes and photo submissions after they arrive."
     >
       <form action={handleSubmit} className="grid max-w-md gap-5 rounded-card border border-tweed/20 bg-ivory-warm p-5 shadow-card sm:p-7">
+        <Field label="Username">
+          <input name="username" type="text" autoComplete="username" required className={inputClass} />
+        </Field>
         <Field label="Password">
-          <input name="password" type="password" required className={inputClass} />
+          <input name="password" type="password" autoComplete="current-password" required className={inputClass} />
         </Field>
         <Button disabled={status === "submitting"} className="gap-2">
           <LockKeyhole className="h-4 w-4" /> {status === "submitting" ? "Signing in..." : "Sign In"}

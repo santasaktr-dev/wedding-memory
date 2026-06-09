@@ -7,6 +7,9 @@ export default function WallPage() {
       eyebrow="Memory Wall"
       title="Wishes & Memories"
       intro="A living wall of words from the people who celebrated with us."
+      eyebrowKey="wall.eyebrow"
+      titleKey="wall.title"
+      introKey="wall.intro"
     >
       <MemoryWallFeed />
     </PageShell>
