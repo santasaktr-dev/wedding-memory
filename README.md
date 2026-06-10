@@ -56,6 +56,8 @@ The script will automatically create these files in Google Drive on first use:
 ```bash
 GOOGLE_APPS_SCRIPT_URL=your-deployed-apps-script-web-app-url
 GOOGLE_APPS_SCRIPT_SECRET=the-same-secret-from-Code.gs
+GOOGLE_STORE_ENV=production
+ADMIN_USERNAME=optional-admin-username
 ADMIN_PASSWORD=choose-an-admin-password
 OPENAI_API_KEY=optional-openai-api-key-for-auto-moderation
 OPENAI_MODERATION_MODEL=omni-moderation-latest
@@ -66,6 +68,8 @@ WEDDING_REVIEWLIST=optional,comma,separated,extra,review,terms
 ```
 
 New wishes and photos go through auto-moderation before appearing publicly. The public wall and gallery show only `approved` submissions. Local wedding blocklist matches are saved as `hidden`; local review-list matches are saved as `pending`; OpenAI moderation flags are saved as `hidden`; the wedding-specific AI guard must approve otherwise the item stays `pending` or `hidden`; moderation failures or missing `OPENAI_API_KEY` in production are saved as `pending` so they do not appear live. Set `AI_GUARD_MODE=off` to disable the paid wedding-specific classifier while keeping rule checks and OpenAI moderation. Admin can approve, hide, or delete submissions from `/admin/dashboard`. If Google Apps Script is not configured yet, the site renders with sample data so the design can be reviewed locally.
+
+Set `GOOGLE_STORE_ENV=production` for the public production site and `GOOGLE_STORE_ENV=development` for local/dev deployments. The Apps Script uses this value to keep production data in `J&S Wedding Memory Wall DB` / `J&S Wedding Moment Uploads` and development data in separate `- development` Sheet and Drive folder resources.
 
 ## Where Things Are Stored
 

@@ -3,6 +3,7 @@ const DRIVE_FOLDER_ID = "";
 const SPREADSHEET_NAME = "J&S Wedding Memory Wall DB";
 const DRIVE_FOLDER_NAME = "J&S Wedding Moment Uploads";
 const SHARED_SECRET_PROPERTY = "SHARED_SECRET";
+const DEFAULT_STORE_ENV = "production";
 
 const WISH_HEADERS = [
   "id",
@@ -38,21 +39,22 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents || "{}");
     assertSecret(payload.secret);
     const action = payload.action;
+    const storeEnv = normalizeStoreEnv(payload.store_env);
 
-    if (action === "createWish") return json(createWish(payload));
-    if (action === "createPhoto") return json(createPhoto(payload));
-    if (action === "listWishes") return json({ wishes: listRows("wishes", WISH_HEADERS, true) });
-    if (action === "listPhotos") return json({ photos: listRows("photos", PHOTO_HEADERS, true) });
+    if (action === "createWish") return json(createWish(payload, storeEnv));
+    if (action === "createPhoto") return json(createPhoto(payload, storeEnv));
+    if (action === "listWishes") return json({ wishes: listRows("wishes", WISH_HEADERS, true, storeEnv) });
+    if (action === "listPhotos") return json({ photos: listRows("photos", PHOTO_HEADERS, true, storeEnv) });
     if (action === "adminList") {
       return json({
-        wishes: listRows("wishes", WISH_HEADERS, false),
-        photos: listRows("photos", PHOTO_HEADERS, false)
+        wishes: listRows("wishes", WISH_HEADERS, false, storeEnv),
+        photos: listRows("photos", PHOTO_HEADERS, false, storeEnv)
       });
     }
-    if (action === "moderate") return json(moderate(payload));
-    if (action === "pinSubmission") return json(pinSubmission(payload));
+    if (action === "moderate") return json(moderate(payload, storeEnv));
+    if (action === "pinSubmission") return json(pinSubmission(payload, storeEnv));
     if (action === "getPhotoBytes") return json(getPhotoBytes(payload));
-    if (action === "likeSubmission") return json(likeSubmission(payload));
+    if (action === "likeSubmission") return json(likeSubmission(payload, storeEnv));
 
     return json({ ok: false, error: "Unknown action" }, 400);
   } catch (error) {
@@ -60,10 +62,10 @@ function doPost(e) {
   }
 }
 
-function createWish(payload) {
+function createWish(payload, storeEnv) {
   const now = new Date().toISOString();
   const id = Utilities.getUuid();
-  const sheet = getSheet("wishes", WISH_HEADERS);
+  const sheet = getSheet("wishes", WISH_HEADERS, storeEnv);
 
   sheet.appendRow([
     id,
@@ -82,19 +84,19 @@ function createWish(payload) {
   return { ok: true, id };
 }
 
-function createPhoto(payload) {
+function createPhoto(payload, storeEnv) {
   const now = new Date().toISOString();
   const id = Utilities.getUuid();
   const extension = extensionFromName(payload.file_name || "upload.jpg");
   const fileName = `${id}.${extension}`;
   const bytes = Utilities.base64Decode(payload.file_base64 || "");
   const blob = Utilities.newBlob(bytes, payload.file_type || "image/jpeg", fileName);
-  const file = getUploadFolder().createFile(blob);
+  const file = getUploadFolder(storeEnv).createFile(blob);
 
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
   const imageUrl = `https://lh3.googleusercontent.com/d/${file.getId()}`;
-  const sheet = getSheet("photos", PHOTO_HEADERS);
+  const sheet = getSheet("photos", PHOTO_HEADERS, storeEnv);
 
   sheet.appendRow([
     id,
@@ -114,8 +116,8 @@ function createPhoto(payload) {
   return { ok: true, id, image_url: imageUrl };
 }
 
-function listRows(sheetName, headers, approvedOnly) {
-  const sheet = getSheet(sheetName, headers);
+function listRows(sheetName, headers, approvedOnly, storeEnv) {
+  const sheet = getSheet(sheetName, headers, storeEnv);
   const values = sheet.getDataRange().getValues();
 
   if (values.length <= 1) return [];
@@ -136,10 +138,10 @@ function listRows(sheetName, headers, approvedOnly) {
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 }
 
-function moderate(payload) {
+function moderate(payload, storeEnv) {
   const sheetName = payload.content_type === "photo" ? "photos" : "wishes";
   const headers = payload.content_type === "photo" ? PHOTO_HEADERS : WISH_HEADERS;
-  const sheet = getSheet(sheetName, headers);
+  const sheet = getSheet(sheetName, headers, storeEnv);
   const values = sheet.getDataRange().getValues();
   const idIndex = headers.indexOf("id");
   const statusIndex = headers.indexOf("status");
@@ -156,10 +158,10 @@ function moderate(payload) {
   return { ok: false, error: "Not found" };
 }
 
-function pinSubmission(payload) {
+function pinSubmission(payload, storeEnv) {
   const sheetName = payload.content_type === "photo" ? "photos" : "wishes";
   const headers = payload.content_type === "photo" ? PHOTO_HEADERS : WISH_HEADERS;
-  const sheet = getSheet(sheetName, headers);
+  const sheet = getSheet(sheetName, headers, storeEnv);
   const values = sheet.getDataRange().getValues();
   const idIndex = headers.indexOf("id");
   const pinnedIndex = headers.indexOf("is_pinned");
@@ -176,8 +178,8 @@ function pinSubmission(payload) {
   return { ok: false, error: "Not found" };
 }
 
-function getSheet(name, headers) {
-  const spreadsheet = getSpreadsheet();
+function getSheet(name, headers, storeEnv) {
+  const spreadsheet = getSpreadsheet(storeEnv);
   let sheet = spreadsheet.getSheetByName(name);
 
   if (!sheet) {
@@ -204,30 +206,47 @@ function ensureHeaders(sheet, headers) {
   });
 }
 
-function getSpreadsheet() {
+function getSpreadsheet(storeEnv) {
   if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
 
   const properties = PropertiesService.getScriptProperties();
-  const existingId = properties.getProperty("SPREADSHEET_ID");
+  const propertyName = scopedPropertyName("SPREADSHEET_ID", storeEnv);
+  const existingId = properties.getProperty(propertyName);
 
   if (existingId) return SpreadsheetApp.openById(existingId);
 
-  const spreadsheet = SpreadsheetApp.create(SPREADSHEET_NAME);
-  properties.setProperty("SPREADSHEET_ID", spreadsheet.getId());
+  const spreadsheet = SpreadsheetApp.create(scopedResourceName(SPREADSHEET_NAME, storeEnv));
+  properties.setProperty(propertyName, spreadsheet.getId());
   return spreadsheet;
 }
 
-function getUploadFolder() {
+function getUploadFolder(storeEnv) {
   if (DRIVE_FOLDER_ID) return DriveApp.getFolderById(DRIVE_FOLDER_ID);
 
   const properties = PropertiesService.getScriptProperties();
-  const existingId = properties.getProperty("DRIVE_FOLDER_ID");
+  const propertyName = scopedPropertyName("DRIVE_FOLDER_ID", storeEnv);
+  const existingId = properties.getProperty(propertyName);
 
   if (existingId) return DriveApp.getFolderById(existingId);
 
-  const folder = DriveApp.createFolder(DRIVE_FOLDER_NAME);
-  properties.setProperty("DRIVE_FOLDER_ID", folder.getId());
+  const folder = DriveApp.createFolder(scopedResourceName(DRIVE_FOLDER_NAME, storeEnv));
+  properties.setProperty(propertyName, folder.getId());
   return folder;
+}
+
+function normalizeStoreEnv(storeEnv) {
+  const value = String(storeEnv || DEFAULT_STORE_ENV).toLowerCase();
+  if (value === "prod" || value === "production") return "production";
+  if (value === "preview" || value === "development" || value === "dev") return "development";
+  return value.replace(/[^a-z0-9_-]/g, "-") || DEFAULT_STORE_ENV;
+}
+
+function scopedPropertyName(baseName, storeEnv) {
+  return storeEnv === "production" ? baseName : `${storeEnv.toUpperCase()}_${baseName}`;
+}
+
+function scopedResourceName(baseName, storeEnv) {
+  return storeEnv === "production" ? baseName : `${baseName} - ${storeEnv}`;
 }
 
 function assertSecret(secret) {
@@ -265,10 +284,10 @@ function getPhotoBytes(payload) {
   return { ok: true, file_base64: base64, file_type: blob.getContentType() };
 }
 
-function likeSubmission(payload) {
+function likeSubmission(payload, storeEnv) {
   const sheetName = payload.content_type === "photo" ? "photos" : "wishes";
   const headers = payload.content_type === "photo" ? PHOTO_HEADERS : WISH_HEADERS;
-  const sheet = getSheet(sheetName, headers);
+  const sheet = getSheet(sheetName, headers, storeEnv);
   const values = sheet.getDataRange().getValues();
   const idIndex = headers.indexOf("id");
   const likesIndex = headers.indexOf("likes_count");

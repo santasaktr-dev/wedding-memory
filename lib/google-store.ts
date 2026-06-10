@@ -2,6 +2,7 @@ import type { PhotoMoment, SubmissionStatus, Wish } from "@/lib/types";
 
 const googleEndpoint = process.env.GOOGLE_APPS_SCRIPT_URL;
 const googleSecret = process.env.GOOGLE_APPS_SCRIPT_SECRET;
+const googleStoreEnv = process.env.GOOGLE_STORE_ENV || process.env.VERCEL_ENV || "development";
 
 export const isGoogleStoreConfigured = Boolean(googleEndpoint);
 
@@ -32,6 +33,7 @@ async function callGoogleStore<T>(
     body: JSON.stringify({
       action,
       secret: googleSecret,
+      store_env: googleStoreEnv,
       ...payload
     }),
     cache: "no-store"

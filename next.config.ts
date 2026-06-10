@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
+const isVercel = process.env.VERCEL === "1";
+
 const nextConfig: NextConfig = {
-  distDir: ".next.nosync",
+  ...(isVercel ? {} : { distDir: ".next.nosync" }),
   images: {
     remotePatterns: [
       {
