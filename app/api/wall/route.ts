@@ -9,6 +9,12 @@ let lastWishesFetchTime = 0;
 const CACHE_TTL = 15000; // 15 seconds
 const useDevFallback = process.env.NODE_ENV !== "production";
 
+function wallCacheHeaders(forceFresh: boolean) {
+  return {
+    "Cache-Control": forceFresh ? "no-store, max-age=0" : "public, s-maxage=15, stale-while-revalidate=30"
+  };
+}
+
 function publicSafeWishes(wishes: Wish[]) {
   return wishes.filter((wish) =>
     isWishLocallySafeForPublic({
@@ -21,15 +27,15 @@ function publicSafeWishes(wishes: Wish[]) {
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const now = Date.now();
-  if (cachedWishes && now - lastWishesFetchTime < CACHE_TTL) {
+  const forceFresh = new URL(request.url).searchParams.has("fresh");
+
+  if (!forceFresh && cachedWishes && now - lastWishesFetchTime < CACHE_TTL) {
     return NextResponse.json(
       { wishes: cachedWishes },
       {
-        headers: {
-          "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30"
-        }
+        headers: wallCacheHeaders(forceFresh)
       }
     );
   }
@@ -42,9 +48,7 @@ export async function GET() {
     return NextResponse.json(
       { wishes },
       {
-        headers: {
-          "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30"
-        }
+        headers: wallCacheHeaders(forceFresh)
       }
     );
   } catch (error) {

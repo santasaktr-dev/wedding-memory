@@ -70,9 +70,9 @@ export function MemoryWallFeed() {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    fetch("/api/wall", { signal: controller.signal, cache: "no-store" })
+    fetch(`/api/wall?fresh=${Date.now()}`, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         clearTimeout(timeoutId);
         if (!response.ok) throw new Error("Could not load wishes");

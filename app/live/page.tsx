@@ -167,7 +167,7 @@ export default function LiveProjectorPage() {
 
       try {
         const [wishesRes, photosRes] = await Promise.all([
-          fetch("/api/wall", { cache: "no-store" }),
+          fetch(`/api/wall?fresh=${Date.now()}`, { cache: "no-store" }),
           fetch("/api/gallery", { cache: "no-store" })
         ]);
 
